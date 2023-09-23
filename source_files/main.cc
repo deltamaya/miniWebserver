@@ -4,7 +4,7 @@
 #include "minilog.hh"
 using namespace httplib;
 using namespace std;
-using enum LogLevel;
+
 stat_manager manager(webroot);
 
 void bad_request(const Request &rq, Response &res)
@@ -224,14 +224,16 @@ bool read_file_handler(const Request &req, Response &res)
     }
     return false;
 }
-
+using namespace minilog;
+using enum LogLevel;
 int main()
 {
     set_logfile("./logfile");
     set_loglev(LogLevel::debug);
-    log_debug("{} server inited",55369);
+
     manager.update_index_html();
     Server svr;
+    log_debug("{} server inited",55369);
     // svr.set_mount_point("/", webroot);
     svr.Get(R"(.*)", read_file_handler);
     svr.Post("/update", post_file);
