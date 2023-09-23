@@ -1,20 +1,17 @@
 #pragma once
 
-#include <unistd.h>
-#include <format>
-#include <iostream>
-#include <cerrno>
-#include <string_view>
-#include <cstdint>
-#include <string>
+#include "utils.h"
 #include <source_location>
 using namespace std::string_view_literals;
 
-#define FOREACH_LEVEL(f) f(Debug) \
-    f(Info)                       \
-        f(Warning)                \
-            f(Error)              \
-                f(Fatal)
+inline std::ofstream g_logfile = []
+{if(auto path=getenv("MINILOG_PATH")){return ofstream{path,ios::app};}return ofstream(); }();
+
+#define FOREACH_LEVEL(f) f(debug) \
+    f(info)                       \
+        f(warning)                \
+            f(error)              \
+                f(fatal)
 
 enum class LogLevel : uint8_t
 {
@@ -22,82 +19,88 @@ enum class LogLevel : uint8_t
     FOREACH_LEVEL(_Function)
 #undef _Function
 };
-
-#define _Function(name) log_##name,
-FOREACH_LEVEL(_Function)
-#undef _Function
-
-class MiniLog
+inline LogLevel g_minlevel = LogLevel::debug;
+template <class T>
+struct _WithSourceLoc
 {
-private:
-    FILE *fd_;
-    LogLevel mlev_;
-    std::string getstr_from_level(LogLevel lev)
+    T data_;
+    std::source_location cur_;
+
+public:
+    template <typename U>
+        requires std::constructible_from<T, U>
+    consteval _WithSourceLoc(U &&data, std::source_location cur = std::source_location::current()) : data_(std::forward<U>(data)), cur_(std::move(cur))
     {
-        switch (lev)
-        {
+    }
+    constexpr T const &data() const
+    {
+        return data_;
+    }
+    constexpr auto location() const
+    {
+        return cur_;
+    }
+};
+
+void set_logfile(const std::filesystem::path &path)
+{
+    g_logfile = ofstream{path};
+}
+void set_loglev(LogLevel lev)
+{
+    g_minlevel = lev;
+}
+
+std::string getstr_from_level(LogLevel lev)
+{
+    switch (lev)
+    {
 #define _Function(name)    \
     case (LogLevel::name): \
         return #name;
-            FOREACH_LEVEL(_Function);
+        FOREACH_LEVEL(_Function);
 #undef _Function
 
-        default:
-            return "Unknown";
-        }
+    default:
+        return "unknown";
     }
+}
 
-    template <class T>
-    struct _WithSourceLoc
-    {
-        T data_;
-        std::source_location cur_;
-
-    public:
-        template <typename U>
-            requires std::constructible_from<T, U>
-        consteval _WithSourceLoc(U &&data, std::source_location cur = std::source_location::current()) : data_(std::forward<U>(data)), cur_(std::move(cur))
-        {
-        }
-        constexpr T const &data() const
-        {
-            return data_;
-        }
-        constexpr auto location() const
-        {
-            return cur_;
-        }
-    };
-
-public:
-    MiniLog() : fd_(stdout), mlev_(LogLevel::Debug) {}
-
-    MiniLog(std::string_view path, std::string_view mode="a"sv, LogLevel mlev = LogLevel::Debug) : fd_(fopen(path.data(), mode.data())), mlev_(mlev)
-    {
-        if (!fd_)
-        {
-            perror("fopen");
-        }
+LogLevel getlevel_from_str(string_view str)
+{
+#define _Function(lev)        \
+    if (#lev == str)          \
+    {                         \
+        return LogLevel::lev; \
     }
+    FOREACH_LEVEL(_Function)
+#undef _Function
+    return LogLevel::info;
+}
 
-    ~MiniLog()
-    {
-        fclose(fd_);
-    }
+template <class... Args>
+void log_generic(LogLevel lev, _WithSourceLoc<std::format_string<Args...>> fmt_with_loc, Args &&...args)
+{
 
-public:
-    void set_min_level(LogLevel mlev)
+    const auto &loc = fmt_with_loc.location();
+    auto msg = std::vformat(fmt_with_loc.data().get(), std::make_format_args(args...));
+    std::chrono::zoned_time now{std::chrono::current_zone(), std::chrono::high_resolution_clock::now()};
+    msg = std::format("{} {}:{} [{}] {}", now, loc.file_name(), loc.line(), getstr_from_level(lev), msg);
+    if (g_logfile)
     {
-        mlev_ = mlev;
+        g_logfile << msg <<endl;
     }
+    if (lev >= g_minlevel)
+    {
+        cout << msg << endl;
+    }
+}
 
-    template <class... Args>
-    void log(LogLevel lev, _WithSourceLoc<std::format_string<Args...>> fmt_with_loc, Args &&...args)
-    {
-        if (lev < mlev_)
-            return;
-        auto cur = fmt_with_loc.location();
-        auto fmt = fmt_with_loc.data();
-        fprintf(fd_, "%s\n", format("[{}] in file {}, line {}: {}\n", getstr_from_level(lev), cur.file_name(), cur.line(), format(fmt, std::forward<Args>(args)...)).c_str());
+#define _Function(name)                                                                     \
+    template <typename... Args>                                                             \
+    void log_##name(_WithSourceLoc<format_string<Args...>> loc, Args &&...args)             \
+    {                                                                                       \
+        log_generic(getlevel_from_str(#name), std::move(loc), std::forward<Args>(args)...); \
     }
-};
+FOREACH_LEVEL(_Function)
+#undef _Function

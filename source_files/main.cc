@@ -1,10 +1,10 @@
 #include "utils.h"
 #include "use_counting.hh"
 #include "zipping.hh"
+#include "minilog.hh"
 using namespace httplib;
 using namespace std;
 using enum LogLevel;
-
 stat_manager manager(webroot);
 
 void bad_request(const Request &rq, Response &res)
@@ -227,6 +227,9 @@ bool read_file_handler(const Request &req, Response &res)
 
 int main()
 {
+    set_logfile("./logfile");
+    set_loglev(LogLevel::debug);
+    log_debug("{} server inited",55369);
     manager.update_index_html();
     Server svr;
     // svr.set_mount_point("/", webroot);

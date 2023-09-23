@@ -1,5 +1,5 @@
 #pragma once
-#include "minilog.hh"
+
 #include <cstddef>
 #include <cstdint>
 #include <unistd.h>
@@ -18,11 +18,13 @@
 #include <cstring>
 #include <string_view>
 #include <iostream>
+#include <format>
+#include <chrono>
 #include <httplib.h>
 
 using namespace std::string_literals;
 using namespace std::string_view_literals;
-inline MiniLog lg;
+
 
 constexpr uint16_t default_port{static_cast<uint16_t>(8888)};
 constexpr int backlog{32};
