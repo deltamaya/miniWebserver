@@ -229,11 +229,16 @@ using enum LogLevel;
 int main()
 {
     set_logfile("./logfile");
+
     set_loglev(LogLevel::debug);
 
     manager.update_index_html();
+
     Server svr;
-    log_debug("{} server inited",55369);
+    log_info("server started");
+    log_warning("server started");
+    log_error("server started");
+    log_fatal("server started");
     // svr.set_mount_point("/", webroot);
     svr.Get(R"(.*)", read_file_handler);
     svr.Post("/update", post_file);

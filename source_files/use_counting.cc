@@ -1,5 +1,6 @@
 #include "utils.h"
 #include "use_counting.hh"
+#include "minilog.hh"
 #include <zip.h>
 using namespace std::chrono;
 using namespace std;
@@ -13,6 +14,7 @@ invalid_iterator:
     for (auto iter{begin}; iter != end; ++iter)
     {
         auto name{iter->path()};
+        minilog::log_debug("iterating {}",name.c_str());
         // cout <<"checking  "<< name << endl;
         if (time(nullptr) - data_[name]["atime"] > 60 * 60 * 24 * 5)
         {

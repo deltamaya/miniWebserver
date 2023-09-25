@@ -22,7 +22,7 @@ namespace minilog
     {
         inline LogLevel g_minlevel = LogLevel::debug;
         inline std::ofstream g_logfile = []
-        {if(auto path=getenv("MINILOG_PATH")){return ofstream{path,ios::app};}return ofstream(); }();
+        {if(auto path=getenv("MINILOG_PATH")){return std::ofstream{path,std::ios::app};}return std::ofstream(); }();
 
         template <class T>
         struct _WithSourceLoc
@@ -47,18 +47,41 @@ namespace minilog
         };
     }
 
-    void set_logfile(const std::filesystem::path &path)
+    inline void set_logfile(const std::filesystem::path &path)
     {
-        details::g_logfile = ofstream{path};
+        details::g_logfile = std::ofstream{path};
     }
-    void set_loglev(LogLevel lev)
+    inline void set_loglev(LogLevel lev)
     {
         details::g_minlevel = lev;
     }
     namespace details
     {
 
-        std::string getstr_from_level(LogLevel lev)
+#if defined(__linux__) || defined(__APPLE__)
+        inline constexpr char k_level_ansi_colors[(std::uint8_t)LogLevel::fatal + 1][8] = {
+            "\E[32m",
+            "\E[34m",
+            "\E[33m",
+            "\E[31m",
+            "\E[31;1m",
+        };
+        inline constexpr char k_reset_ansi_color[4] = "\E[m";
+#define _MINILOG_IF_HAS_ANSI_COLORS(x) x
+#else
+#define _MINILOG_IF_HAS_ANSI_COLORS(x)
+        inline constexpr char k_level_ansi_colors[(std::uint8_t)log_level::fatal + 1][1] = {
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+        };
+        inline constexpr char k_reset_ansi_color[1] = "";
+#endif
+        inline std::string getstr_from_level(LogLevel lev)
         {
             switch (lev)
             {
@@ -73,7 +96,7 @@ namespace minilog
             }
         }
 
-        LogLevel getlevel_from_str(string_view str)
+        inline LogLevel getlevel_from_str(std::string_view str)
         {
 #define _Function(lev)        \
     if (#lev == str)          \
@@ -95,17 +118,18 @@ namespace minilog
             msg = std::format("{} {}:{} [{}] {}", now, loc.file_name(), loc.line(), details::getstr_from_level(lev), msg);
             if (g_logfile)
             {
-                g_logfile << msg << endl;
+                g_logfile << msg << std::endl;
             }
             if (lev >= g_minlevel)
             {
-                cout << msg << endl;
+                std::cout << _MINILOG_IF_HAS_ANSI_COLORS(k_level_ansi_colors[(std::uint8_t)lev] +)
+                    msg _MINILOG_IF_HAS_ANSI_COLORS(+ k_reset_ansi_color) + '\n';
             }
         }
     }
 #define _Function(name)                                                                                       \
     template <typename... Args>                                                                               \
-    void log_##name(details::_WithSourceLoc<format_string<Args...>> loc, Args &&...args)                      \
+    void log_##name(details::_WithSourceLoc<std::format_string<Args...>> loc, Args &&...args)                      \
     {                                                                                                         \
         details::log_generic(details::getlevel_from_str(#name), std::move(loc), std::forward<Args>(args)...); \
     }
